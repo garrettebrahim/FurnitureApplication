@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Settings · Furniture Planner{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<form method="post" class="settings-form">
+  <label>Destination ZIP code
+    <input type="text" name="zip_code" value="{{ settings.zip_code }}" placeholder="e.g. 10001">
+    <small class="muted">Used to fetch shipping estimates from product pages when possible.</small>
+  </label>
+
+  <div class="grid-2">
+    <label>Move-in date
+      <input type="date" name="move_in_date" value="{{ settings.move_in_date }}">
+      <small class="muted">Earliest you can receive deliveries at the new place.</small>
+    </label>
+    <label>Work start date
+      <input type="date" name="work_start_date" value="{{ settings.work_start_date }}">
+      <small class="muted">Hard cutoff &mdash; everything must be ready before this.</small>
+    </label>
+  </div>
+
+  <div class="info-box">
+    <strong>How deadlines work</strong>
+    <ul>
+      <li>Non-assembly items must arrive by the day before work starts.</li>
+      <li>Assembly items must arrive at least <em>assembly days</em> before work starts, so you have time to build them.</li>
+      <li>Nothing can arrive before move-in.</li>
+    </ul>
+  </div>
+
+  <fieldset>
+    <legend>Categories</legend>
+    <ul>
+      {% for c in settings.categories %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+    <label>Add a category
+      <input type="text" name="new_category" placeholder="e.g. Office">
+    </label>
+  </fieldset>
+
+  <button class="primary" type="submit">Save settings</button>
+</form>
+
+<h2 class="pnl-section-title">Backup &amp; Restore</h2>
+<div class="settings-form" style="margin-top: 8px;">
+  <p class="muted" style="margin-top: 0;">
+    Render's free tier has ephemeral storage — your items may reset when the
+    app restarts or redeploys. Download a backup periodically; restore it
+    after a wipe.
+  </p>
+  <p>
+    <a class="button-link" href="{{ url_for('backup') }}">
+      ⤓ Download backup (JSON)
+    </a>
+  </p>
+
+  <form method="post" action="{{ url_for('restore') }}" enctype="multipart/form-data" style="margin-top: 12px;">
+    <label>Restore from backup file
+      <input type="file" name="backup" accept="application/json" required>
+      <small class="muted">This replaces all current items and settings.</small>
+    </label>
+    <button class="primary" type="submit"
+            onclick="return confirm('This will overwrite all current items and settings. Continue?');">
+      Upload &amp; restore
+    </button>
+  </form>
+</div>
+{% endblock %}

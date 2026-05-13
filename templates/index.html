@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Furniture Planner{% endblock %}
+
+{% block topbar_right %}
+  <button id="add-item-btn" class="primary">+ Add Item</button>
+{% endblock %}
+
+{% block content %}
+<div class="arrival-banner"
+     data-move-in="{{ settings.move_in_date }}"
+     data-work-start="{{ settings.work_start_date }}">
+  Move-in: <strong>{{ settings.move_in_date }}</strong>
+  &nbsp;·&nbsp; Work starts: <strong>{{ settings.work_start_date }}</strong>
+  &nbsp;·&nbsp; Ship to: <strong>{{ settings.zip_code or "— set a zip code in Settings —" }}</strong>
+</div>
+
+<div class="tabs" role="tablist">
+  {% for lt in list_types %}
+    <button class="tab {% if loop.first %}active{% endif %}"
+            data-tab="{{ lt }}"
+            role="tab">
+      {{ {'to_buy':'To Buy','wish_list':'Wish List','interested':'Interested'}[lt] }}
+      <span class="count">{{ counts[lt] }}</span>
+      {% if totals[lt].total > 0 %}<span class="tab-total">${{ "{:,.0f}".format(totals[lt].total) }}</span>{% endif %}
+    </button>
+  {% endfor %}
+</div>
+
+<div class="layout">
+  <aside class="categories">
+    <h3>Categories</h3>
+    <ul id="category-list">
+      <li><a href="#" class="cat-link active" data-cat="__all__">All</a></li>
+      {% for c in settings.categories %}
+        <li><a href="#" class="cat-link" data-cat="{{ c }}">{{ c }}</a></li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="items">
+    {% for lt in list_types %}
+      <div class="tab-panel {% if loop.first %}active{% endif %}" data-panel="{{ lt }}">
+        {% if grouped[lt] %}
+          {% for category, items in grouped[lt].items() %}
+            <div class="category-group" data-cat="{{ category }}">
+              <h2>
+                {{ category }}
+                <span class="muted">({{ items|length }} item{% if items|length != 1 %}s{% endif %})</span>
+                {% set cat_total = totals[lt].per_category[category].total %}
+                {% if cat_total > 0 %}<span class="cat-total">${{ "{:,.2f}".format(cat_total) }}</span>{% endif %}
+              </h2>
+              <div class="card-grid">
+                {% for it in items %}
+                  <article class="card urgency-{{ it.urgency }}" data-id="{{ it.id }}">
+                    <div class="card-img">
+                      {% if it.image_url %}
+                        <img src="{{ it.image_url }}" alt="{{ it.name }}" loading="lazy">
+                      {% else %}
+                        <div class="placeholder">No image</div>
+                      {% endif %}
+                    </div>
+                    <div class="card-body">
+                      <h4>
+                        {% if it.source_url %}
+                          <a href="{{ it.source_url }}" target="_blank" rel="noopener">{{ it.name }}</a>
+                        {% else %}
+                          {{ it.name }}
+                        {% endif %}
+                      </h4>
+                      <div class="price">
+                        {% if it.price is not none %}${{ "%.2f"|format(it.price) }}{% else %}<span class="muted">no price</span>{% endif %}
+                        {% if it.store and it.store != 'generic' %}<span class="badge">{{ it.store }}</span>{% endif %}
+                        {% if it.needs_assembly %}<span class="badge badge-assembly">🔧 {{ it.assembly_days }}d build</span>{% endif %}
+                      </div>
+                      <div class="order-by">{{ it.order_window_label }}</div>
+                      <div class="arrival muted">{{ it.arrival_label }}</div>
+                      <div class="ship-line muted">
+                        Ship {{ it.ship_days_min if it.ship_days_min is not none else '?' }}–{{ it.ship_days_max if it.ship_days_max is not none else '?' }}d
+                        {% if it.ship_source == "manual" %}<span class="src-verified">✓ verified</span>
+                        {% elif it.ship_source == "page" %}<span class="src-page">✓ from page</span>
+                        {% else %}<span class="src-default">⚠ unverified</span>{% endif %}
+                      </div>
+                      {% if it.days_left is not none %}
+                        <div class="days-left">
+                          {% if it.days_left < 0 %}
+                            <strong>{{ -it.days_left }} day(s) overdue</strong>
+                          {% else %}
+                            <strong>{{ it.days_left }}</strong> day(s) until latest order date
+                          {% endif %}
+                        </div>
+                      {% endif %}
+                      <div class="actions">
+                        <select class="move-list" data-id="{{ it.id }}">
+                          {% for opt in list_types %}
+                            <option value="{{ opt }}" {% if opt == it.list_type %}selected{% endif %}>
+                              Move to {{ {'to_buy':'To Buy','wish_list':'Wish List','interested':'Interested'}[opt] }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                        <button class="edit-ship" data-id="{{ it.id }}"
+                                data-min="{{ it.ship_days_min if it.ship_days_min is not none else '' }}"
+                                data-max="{{ it.ship_days_max if it.ship_days_max is not none else '' }}">
+                          Ship days
+                        </button>
+                        <button class="edit-assembly" data-id="{{ it.id }}"
+                                data-needs="{{ '1' if it.needs_assembly else '0' }}"
+                                data-days="{{ it.assembly_days or 1 }}">
+                          Assembly
+                        </button>
+                        <button class="delete-item danger" data-id="{{ it.id }}">Delete</button>
+                      </div>
+                    </div>
+                  </article>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty">
+            <p>Nothing here yet. Click <strong>+ Add Item</strong> to add a product URL.</p>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </section>
+</div>
+
+<!-- Ship-days mini-modal -->
+<div id="ship-modal" class="modal hidden">
+  <div class="modal-card narrow">
+    <h2>Confirm shipping days</h2>
+    <p class="muted">After checking the product page (ideally with your zip code entered), enter the shipping window you saw and mark it verified.</p>
+    <input type="hidden" id="ship-modal-id">
+    <div class="grid-2">
+      <label>Min days <input type="number" id="ship-modal-min" min="0"></label>
+      <label>Max days <input type="number" id="ship-modal-max" min="0"></label>
+    </div>
+    <label class="inline" style="margin-top:10px;">
+      <input type="checkbox" id="ship-modal-verified">
+      <span>I verified this on the product page (mark as verified)</span>
+    </label>
+    <div class="modal-actions">
+      <button id="ship-modal-save" class="primary">Save</button>
+      <button id="ship-modal-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Item modal -->
+<div id="add-modal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Add an item</h2>
+    <label>Product URL
+      <input type="url" id="add-url" placeholder="https://www.wayfair.com/...">
+    </label>
+    <button id="scrape-btn">Fetch product details</button>
+    <div id="scrape-status" class="muted"></div>
+
+    <div id="scrape-preview" class="hidden">
+      <div class="preview-row">
+        <img id="preview-img" src="" alt="">
+        <div class="preview-fields">
+          <label>Name <input type="text" id="add-name"></label>
+          <label>Price <input type="number" step="0.01" id="add-price"></label>
+          <label>Store <input type="text" id="add-store" readonly></label>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <label>List
+          <select id="add-list">
+            <option value="to_buy">To Buy</option>
+            <option value="wish_list">Wish List</option>
+            <option value="interested">Interested</option>
+          </select>
+        </label>
+        <label>Category
+          <select id="add-category">
+            {% for c in settings.categories %}<option>{{ c }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <fieldset class="ship-box">
+        <legend>Assembly</legend>
+        <label class="inline">
+          <input type="checkbox" id="add-needs-assembly">
+          Needs to be built / assembled
+        </label>
+        <label id="add-assembly-days-wrap" class="hidden">Assembly days
+          <input type="number" id="add-assembly-days" min="1" value="1">
+          <small class="muted">Days you'll need in the apartment to build it.</small>
+        </label>
+      </fieldset>
+
+      <fieldset class="ship-box">
+        <legend>Shipping days</legend>
+        <div class="grid-2">
+          <label>Min days <input type="number" id="add-ship-min" min="0"></label>
+          <label>Max days <input type="number" id="add-ship-max" min="0"></label>
+        </div>
+        <div id="ship-source" class="muted"></div>
+        <div id="arrival-window-preview" class="arrival muted"></div>
+        <div id="order-window-preview" class="order-by"></div>
+      </fieldset>
+
+      <label>Notes <textarea id="add-notes" rows="2"></textarea></label>
+
+      <div id="scrape-warnings" class="warnings"></div>
+
+      <div class="modal-actions">
+        <button id="save-btn" class="primary">Save item</button>
+        <button id="cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

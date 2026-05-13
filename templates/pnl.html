@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}P&amp;L · Furniture Planner{% endblock %}
+
+{% macro money(v) -%}
+  {%- if v -%}${{ "{:,.2f}".format(v) }}{%- else -%}<span class="muted">—</span>{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<h1>P&amp;L by Category</h1>
+
+<!-- Headline KPIs -->
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="kpi-label">Total planned spend</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(data.grand_total.total) }}</div>
+    <div class="kpi-meta">{{ data.grand_total.count }} item{% if data.grand_total.count != 1 %}s{% endif %}{% if data.grand_total.no_price %} · <span class="warn-inline">{{ data.grand_total.no_price }} missing price</span>{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Committed (To Buy)</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(data.col_totals.to_buy.total) }}</div>
+    <div class="kpi-meta">{{ data.col_totals.to_buy.count }} item{% if data.col_totals.to_buy.count != 1 %}s{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Considering (Wish List)</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(data.col_totals.wish_list.total) }}</div>
+    <div class="kpi-meta">{{ data.col_totals.wish_list.count }} item{% if data.col_totals.wish_list.count != 1 %}s{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Just looking (Interested)</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(data.col_totals.interested.total) }}</div>
+    <div class="kpi-meta">{{ data.col_totals.interested.count }} item{% if data.col_totals.interested.count != 1 %}s{% endif %}</div>
+  </div>
+</div>
+
+<!-- Category × list-type matrix -->
+<h2 class="pnl-section-title">Spend matrix — category × list</h2>
+<div class="pnl-table-wrap">
+<table class="pnl-table">
+  <thead>
+    <tr>
+      <th class="left">Category</th>
+      <th>Items</th>
+      {% for lt in list_types %}
+        <th>{{ list_labels[lt] }}</th>
+      {% endfor %}
+      <th>Total</th>
+      <th>% of total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in data.categories %}
+      {% set row = data.row_totals[c] %}
+      <tr>
+        <td class="left"><strong>{{ c }}</strong>{% if data.matrix[c]['to_buy'].no_price + data.matrix[c]['wish_list'].no_price + data.matrix[c]['interested'].no_price > 0 %} <span class="warn-inline">!</span>{% endif %}</td>
+        <td>{{ row.count }}</td>
+        {% for lt in list_types %}
+          {% set cell = data.matrix[c][lt] %}
+          <td>
+            {{ money(cell.total) }}
+            {% if cell.count %}<div class="cell-sub muted">{{ cell.count }} item{% if cell.count != 1 %}s{% endif %}</div>{% endif %}
+          </td>
+        {% endfor %}
+        <td><strong>{{ money(row.total) }}</strong></td>
+        <td class="muted">
+          {%- if data.grand_total.total > 0 -%}
+            {{ "%.1f"|format(100.0 * row.total / data.grand_total.total) }}%
+          {%- else -%}—{%- endif -%}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td class="left"><strong>Grand total</strong></td>
+      <td><strong>{{ data.grand_total.count }}</strong></td>
+      {% for lt in list_types %}
+        {% set cell = data.col_totals[lt] %}
+        <td><strong>{{ money(cell.total) }}</strong></td>
+      {% endfor %}
+      <td><strong>{{ money(data.grand_total.total) }}</strong></td>
+      <td class="muted">100%</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+
+<!-- Per-store breakdown -->
+{% if data.by_store %}
+<h2 class="pnl-section-title">Spend by store</h2>
+<div class="pnl-table-wrap">
+<table class="pnl-table compact">
+  <thead>
+    <tr>
+      <th class="left">Store</th>
+      <th>Items</th>
+      <th>Total</th>
+      <th>% of total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for store, agg in data.by_store %}
+      <tr>
+        <td class="left"><strong>{{ store }}</strong>{% if agg.no_price %} <span class="warn-inline">{{ agg.no_price }} no price</span>{% endif %}</td>
+        <td>{{ agg.count }}</td>
+        <td>{{ money(agg.total) }}</td>
+        <td class="muted">
+          {%- if data.grand_total.total > 0 -%}
+            {{ "%.1f"|format(100.0 * agg.total / data.grand_total.total) }}%
+          {%- else -%}—{%- endif -%}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<!-- Itemized breakdown per category -->
+<h2 class="pnl-section-title">Itemized breakdown</h2>
+{% if data.grand_total.count == 0 %}
+  <div class="empty"><p>No items yet. Add some on the <a href="{{ url_for('index') }}">Items</a> page.</p></div>
+{% else %}
+  {% for c in data.categories %}
+    {% if data.row_totals[c].count > 0 %}
+      <details class="pnl-cat-detail" open>
+        <summary>
+          <span class="pnl-cat-name">{{ c }}</span>
+          <span class="muted">{{ data.row_totals[c].count }} item{% if data.row_totals[c].count != 1 %}s{% endif %}</span>
+          <span class="pnl-cat-total">{{ money(data.row_totals[c].total) }}</span>
+        </summary>
+        <table class="pnl-table compact items">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="left">Item</th>
+              <th class="left">Store</th>
+              <th class="left">List</th>
+              <th>Price</th>
+              <th class="left">Order by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in data.details[c] %}
+              <tr class="urgency-{{ it.urgency }}">
+                <td class="thumb">
+                  {% if it.image_url %}<img src="{{ it.image_url }}" alt="" loading="lazy">{% else %}<div class="agenda-thumb-placeholder"></div>{% endif %}
+                </td>
+                <td class="left">
+                  {% if it.source_url %}<a href="{{ it.source_url }}" target="_blank" rel="noopener">{{ it.name }}</a>{% else %}{{ it.name }}{% endif %}
+                  {% if it.needs_assembly %}<span class="badge badge-assembly">🔧 {{ it.assembly_days }}d</span>{% endif %}
+                </td>
+                <td class="left">{% if it.store and it.store != 'generic' %}{{ it.store }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td class="left"><span class="badge">{{ list_labels[it.list_type] }}</span></td>
+                <td>{{ money(it.price) }}</td>
+                <td class="left">
+                  {% if it.order_window.valid %}{{ it.order_window_label }}{% else %}<span class="muted">{{ it.order_window_label }}</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td></td>
+              <td class="left"><strong>{{ c }} subtotal</strong></td>
+              <td></td>
+              <td></td>
+              <td><strong>{{ money(data.row_totals[c].total) }}</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </details>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% endblock %}

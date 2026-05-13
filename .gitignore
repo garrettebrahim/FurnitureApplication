@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local data — do NOT commit your personal items/settings to GitHub
+data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Probes / scratch
+_probe_*.py
+_*_dump.html

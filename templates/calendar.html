@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Calendar · Furniture Planner{% endblock %}
+
+{% block content %}
+<h1>Order Calendar</h1>
+
+<div class="arrival-banner">
+  Today: <strong>{{ today }}</strong>
+  &nbsp;·&nbsp; Move-in: <strong>{{ settings.move_in_date }}</strong>
+  &nbsp;·&nbsp; Work starts: <strong>{{ settings.work_start_date }}</strong>
+</div>
+
+<h2 class="agenda-section-title">Next 14 days</h2>
+<div class="day-strip">
+  {% for d in strip %}
+    <div class="day-strip-cell {% if d.is_today %}today{% endif %} {% if d.count > 0 %}has-items{% endif %}">
+      <div class="day-strip-dow">{{ d.label_day }}</div>
+      <div class="day-strip-num">{{ d.label_num }}</div>
+      {% if d.count > 0 %}<div class="day-strip-count">{{ d.count }}</div>{% endif %}
+    </div>
+  {% endfor %}
+</div>
+
+<h2 class="agenda-section-title">Order-by agenda</h2>
+{% if not sorted_dates %}
+  <div class="empty">
+    <p>No items have a computed order-by date yet. Add items and set their shipping days to see them here.</p>
+  </div>
+{% else %}
+  <ol class="agenda">
+    {% for d in sorted_dates %}
+      {% set items = by_date[d] %}
+      <li class="agenda-day">
+        <div class="agenda-date">
+          <div class="agenda-date-main">{{ d }}</div>
+          <div class="agenda-date-meta">
+            {{ items|length }} item{% if items|length != 1 %}s{% endif %}
+          </div>
+        </div>
+        <ul class="agenda-items">
+          {% for it in items %}
+            <li class="agenda-item urgency-{{ it.urgency }}">
+              {% if it.image_url %}
+                <img src="{{ it.image_url }}" alt="" loading="lazy">
+              {% else %}
+                <div class="agenda-thumb-placeholder"></div>
+              {% endif %}
+              <div class="agenda-item-body">
+                <div class="agenda-item-title">
+                  {% if it.source_url %}<a href="{{ it.source_url }}" target="_blank" rel="noopener">{{ it.name }}</a>{% else %}{{ it.name }}{% endif %}
+                </div>
+                <div class="agenda-item-meta">
+                  {% if it.store and it.store != 'generic' %}<span class="badge">{{ it.store }}</span>{% endif %}
+                  <span class="badge">{{ it.category }}</span>
+                  <span class="badge">{{ {'to_buy':'To Buy','wish_list':'Wish List','interested':'Interested'}[it.list_type] }}</span>
+                  {% if it.needs_assembly %}<span class="badge badge-assembly">🔧 {{ it.assembly_days }}d build</span>{% endif %}
+                  {% if it.price is not none %}<span class="agenda-price">${{ "{:,.2f}".format(it.price) }}</span>{% endif %}
+                </div>
+                <div class="agenda-item-window muted">
+                  {{ it.order_window_label }} · {{ it.arrival_label }} · ship {{ it.ship_days_min }}–{{ it.ship_days_max }}d
+                  {% if it.ship_source == "manual" %}<span class="src-verified">✓ verified</span>
+                  {% elif it.ship_source == "page" %}<span class="src-page">✓ from page</span>
+                  {% else %}<span class="src-default">⚠ unverified</span>{% endif %}
+                </div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </li>
+    {% endfor %}
+  </ol>
+{% endif %}
+
+{% if no_date %}
+  <h2 class="agenda-section-title">Missing shipping info</h2>
+  <p class="muted">These items don't have an order-by date yet — set min/max shipping days.</p>
+  <ul class="agenda-items no-date">
+    {% for it in no_date %}
+      <li class="agenda-item urgency-unknown">
+        {% if it.image_url %}<img src="{{ it.image_url }}" alt="" loading="lazy">{% else %}<div class="agenda-thumb-placeholder"></div>{% endif %}
+        <div class="agenda-item-body">
+          <div class="agenda-item-title">{{ it.name }}</div>
+          <div class="agenda-item-meta">
+            {% if it.store and it.store != 'generic' %}<span class="badge">{{ it.store }}</span>{% endif %}
+            <span class="badge">{{ it.category }}</span>
+            <span class="badge">{{ {'to_buy':'To Buy','wish_list':'Wish List','interested':'Interested'}[it.list_type] }}</span>
+          </div>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}
