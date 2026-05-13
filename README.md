@@ -1,8 +1,16 @@
 # Furniture Planner
 
-Local Flask app to plan furniture purchases so they arrive **June 2–6, 2026**.
+Local-first Flask app to plan furniture purchases so everything arrives between **move-in (Jun 2)** and **work start (Jun 8)**, accounting for per-item assembly time.
 
-## Quick start
+Features:
+- Three lists (To Buy / Wish List / Interested) × categories (Living Room, Bedroom, …)
+- URL scraper with TLS-fingerprint bypass for Anthropologie, Target, Wayfair, Amazon (in addition to Quince's `__NEXT_DATA__` parser)
+- Per-item ship-day estimate with **"verified"** flag once you confirm on the product page
+- Calendar / agenda view of order-by dates
+- P&L tab — spend matrix by category × list, by-store breakdown, itemized subtotals
+- Backup / restore as JSON
+
+## Run locally
 
 ```powershell
 cd "C:\Users\User\Documents\Furniture Program"
@@ -12,14 +20,16 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Then open http://localhost:5000 in your browser.
+Open <http://127.0.0.1:5000>. No auth locally (set the env vars below to enable it).
 
-## How it works
+## Optional environment variables
 
-1. Set your destination zip code in **Settings**.
-2. Click **+ Add Item**, paste a product URL (Amazon, Wayfair, Quince, Anthropologie, Target, or any site with Open Graph tags).
-3. The app scrapes the product name, price, and image and tries to detect shipping days. If detection fails, enter min/max shipping days manually.
-4. The app back-calculates the **order-by date range** to hit the Jun 2–6 arrival window.
-5. Organize items by **category** (Living Room, Bedroom, Kitchen, +your own) and **list status** (To Buy / Wish List / Interested).
+| Var | What it does |
+|---|---|
+| `BASIC_AUTH_USER` | If set together with `BASIC_AUTH_PASS`, enables HTTP basic auth on every route. |
+| `BASIC_AUTH_PASS` | Password for basic auth. |
+| `DATA_DIR` | Override where `items.json` / `settings.json` live (defaults to `./data`). Set this when deploying so it points at a writable directory. |
 
-Data is stored in `data/items.json` and `data/settings.json`.
+## Deploy to a shared URL
+
+See [`DEPLOY.md`](./DEPLOY.md) — step-by-step Render.com walkthrough, free tier, with auth.
