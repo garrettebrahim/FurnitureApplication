@@ -18,3 +18,7 @@ services:
       - key: SCRAPINGBEE_API_KEY
         sync: false   # optional — set in dashboard to enable residential-proxy scraping
     healthCheckPath: /healthz
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
