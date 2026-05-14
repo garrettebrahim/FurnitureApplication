@@ -205,33 +205,90 @@
     location.reload();
   });
 
-  // -------------------- Ship-days mini-modal --------------------
-  const shipModal = $("#ship-modal");
-  if (shipModal) {
-    $("#ship-modal-cancel").addEventListener("click", () => shipModal.classList.add("hidden"));
-    shipModal.addEventListener("click", (e) => {
-      if (!e.target.closest(".modal-card")) shipModal.classList.add("hidden");
-    });
-    $("#ship-modal-save").addEventListener("click", async () => {
-      const id = $("#ship-modal-id").value;
-      const smin = parseInt($("#ship-modal-min").value, 10);
-      const smax = parseInt($("#ship-modal-max").value, 10);
-      if (Number.isNaN(smin) || Number.isNaN(smax) || smax < smin) {
-        alert("Min and max must be numbers and min ≤ max.");
-        return;
-      }
-      const res = await fetch(`/api/items/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ship_days_min: smin,
-          ship_days_max: smax,
-          ship_source: $("#ship-modal-verified").checked ? "manual" : "default",
-        }),
-      });
-      if (res.ok) location.reload();
-    });
+  // -------------------- Master Edit modal --------------------
+  const editModal = $("#edit-modal");
+  function openEdit(item) {
+    $("#edit-id").value = item.id;
+    $("#edit-name").value = item.name || "";
+    $("#edit-price").value = item.price != null ? item.price : "";
+    $("#edit-store").value = item.store || "";
+    $("#edit-image-url").value = item.image_url || "";
+    $("#edit-source-url").value = item.source_url || "";
+    $("#edit-list").value = item.list_type || "to_buy";
+    // Category may not be in the static option list if it's a one-off; add it.
+    const catSel = $("#edit-category");
+    if (item.category && !Array.from(catSel.options).some((o) => o.value === item.category)) {
+      const o = document.createElement("option");
+      o.value = item.category;
+      o.textContent = item.category;
+      catSel.appendChild(o);
+    }
+    catSel.value = item.category || "";
+    $("#edit-ship-min").value = item.ship_days_min != null ? item.ship_days_min : "";
+    $("#edit-ship-max").value = item.ship_days_max != null ? item.ship_days_max : "";
+    $("#edit-ship-verified").checked = item.ship_source === "manual";
+    $("#edit-needs-assembly").checked = !!item.needs_assembly;
+    $("#edit-assembly-days").value = item.assembly_days || 1;
+    $("#edit-assembly-days-wrap").classList.toggle("hidden", !item.needs_assembly);
+    $("#edit-notes").value = item.notes || "";
+    const img = $("#edit-image-preview");
+    if (item.image_url) {
+      img.src = item.image_url;
+      img.style.display = "";
+    } else {
+      img.removeAttribute("src");
+      img.style.display = "none";
+    }
+    editModal.classList.remove("hidden");
   }
+  function closeEdit() { editModal.classList.add("hidden"); }
+  $("#edit-cancel").addEventListener("click", closeEdit);
+  editModal.addEventListener("click", (e) => {
+    if (!e.target.closest(".modal-card")) closeEdit();
+  });
+  // Live image preview when the URL changes
+  $("#edit-image-url").addEventListener("input", (e) => {
+    const img = $("#edit-image-preview");
+    const v = e.target.value.trim();
+    if (v) { img.src = v; img.style.display = ""; }
+    else { img.removeAttribute("src"); img.style.display = "none"; }
+  });
+  $("#edit-needs-assembly").addEventListener("change", (e) => {
+    $("#edit-assembly-days-wrap").classList.toggle("hidden", !e.target.checked);
+  });
+  $("#edit-save").addEventListener("click", async () => {
+    const id = $("#edit-id").value;
+    const smin = parseInt($("#edit-ship-min").value, 10);
+    const smax = parseInt($("#edit-ship-max").value, 10);
+    if (!Number.isNaN(smin) && !Number.isNaN(smax) && smax < smin) {
+      alert("Shipping max must be ≥ min.");
+      return;
+    }
+    const needs = $("#edit-needs-assembly").checked;
+    const payload = {
+      name: $("#edit-name").value.trim() || "Untitled item",
+      price: parseFloat($("#edit-price").value),
+      store: $("#edit-store").value.trim() || "generic",
+      image_url: $("#edit-image-url").value.trim() || null,
+      source_url: $("#edit-source-url").value.trim() || "",
+      list_type: $("#edit-list").value,
+      category: $("#edit-category").value,
+      ship_days_min: Number.isNaN(smin) ? null : smin,
+      ship_days_max: Number.isNaN(smax) ? null : smax,
+      ship_source: $("#edit-ship-verified").checked ? "manual" : "default",
+      needs_assembly: needs,
+      assembly_days: needs ? Math.max(1, parseInt($("#edit-assembly-days").value, 10) || 1) : 0,
+      notes: $("#edit-notes").value.trim(),
+    };
+    if (Number.isNaN(payload.price)) payload.price = null;
+    const res = await fetch(`/api/items/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) location.reload();
+    else alert("Save failed: HTTP " + res.status);
+  });
 
   // -------------------- Card actions --------------------
   document.addEventListener("change", async (e) => {
@@ -254,41 +311,15 @@
       const res = await fetch(`/api/items/${id}`, { method: "DELETE" });
       if (res.ok) location.reload();
     }
-    if (e.target.matches(".edit-ship")) {
-      const id = e.target.dataset.id;
-      $("#ship-modal-id").value = id;
-      $("#ship-modal-min").value = e.target.dataset.min || "";
-      $("#ship-modal-max").value = e.target.dataset.max || "";
-      $("#ship-modal-verified").checked = true;
-      $("#ship-modal").classList.remove("hidden");
-    }
-    if (e.target.matches(".edit-assembly")) {
-      const id = e.target.dataset.id;
-      const currentlyNeeds = e.target.dataset.needs === "1";
-      const ans = confirm(
-        currentlyNeeds
-          ? "This item is marked as needing assembly. OK to keep, Cancel to remove the assembly flag."
-          : "Mark this item as needing assembly? OK to add, Cancel to leave as-is."
-      );
-      let needs_assembly = ans ? true : !currentlyNeeds ? false : false;
-      // If toggling off when already on, ans=false above means user wants to remove.
-      if (currentlyNeeds && !ans) needs_assembly = false;
-      if (!currentlyNeeds && !ans) return; // no-op
-
-      let assembly_days = parseInt(e.target.dataset.days, 10) || 1;
-      if (needs_assembly) {
-        const d = prompt("How many days do you need to build it?", String(assembly_days));
-        if (d === null) return;
-        assembly_days = Math.max(1, parseInt(d, 10) || 1);
-      } else {
-        assembly_days = 0;
+    if (e.target.matches(".edit-item")) {
+      const card = e.target.closest(".card");
+      if (!card) return;
+      try {
+        const item = JSON.parse(card.dataset.item);
+        openEdit(item);
+      } catch (err) {
+        alert("Could not load item data: " + err.message);
       }
-      const res = await fetch(`/api/items/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ needs_assembly, assembly_days }),
-      });
-      if (res.ok) location.reload();
     }
   });
 })();

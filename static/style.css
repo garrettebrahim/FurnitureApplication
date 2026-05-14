@@ -471,3 +471,84 @@ button.danger { color: var(--danger); border-color: #f0c0bd; }
 .settings-form fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 14px 0; padding: 10px 14px; }
 .settings-form fieldset legend { font-size: 12px; color: var(--muted); }
 .settings-form ul { margin: 0 0 10px; padding-left: 20px; }
+
+button.primary-outline {
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-weight: 600;
+}
+button.primary-outline:hover { background: #ecf3ee; }
+
+/* -------------------- Mobile / responsive -------------------- */
+@media (max-width: 768px) {
+  body { font-size: 14px; }
+  main { padding: 14px; }
+
+  .topbar {
+    padding: 10px 14px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .topbar .brand { font-size: 16px; }
+  .topbar nav { display: flex; flex-wrap: wrap; gap: 4px; }
+  .topbar nav a { margin-right: 0; padding: 4px 6px; font-size: 13px; }
+  .topbar .spacer { display: none; }
+  .topbar > :last-child { margin-left: auto; }
+
+  .arrival-banner { font-size: 13px; padding: 8px 12px; }
+
+  /* Stack the sidebar above the items. Hide the redundant text list since
+     the chip strip below the tabs already provides category filtering. */
+  .layout { grid-template-columns: 1fr; gap: 12px; }
+  .categories { display: none; }
+
+  .tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .tab { white-space: nowrap; padding: 10px 12px; font-size: 14px; }
+
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .card-body { padding: 8px 10px 10px; }
+  .card-body h4 { font-size: 13px; }
+  .price { font-size: 14px; flex-wrap: wrap; }
+
+  .actions { gap: 6px; }
+  .actions button, .actions select {
+    flex: 1 1 auto;
+    min-height: 36px;
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+  .actions .delete-item { flex: 0 1 auto; }
+
+  /* Modals expand to fit the viewport on phones */
+  .modal { padding: 0; align-items: flex-end; }
+  .modal-card {
+    max-width: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 16px;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+  .modal-card.narrow { max-width: none; }
+  .preview-row { flex-direction: column; align-items: stretch; }
+  .preview-row img { width: 100%; height: auto; max-height: 220px; }
+  .grid-2 { grid-template-columns: 1fr; gap: 8px; }
+  .modal-actions { position: sticky; bottom: -16px; background: var(--surface); padding-top: 10px; margin-top: 14px; }
+  .modal-actions button { flex: 1; min-height: 40px; }
+
+  /* P&L: cells already overflow-scroll; make them slimmer */
+  .pnl-table th, .pnl-table td { padding: 8px 10px; font-size: 13px; }
+
+  /* Calendar */
+  .day-strip { grid-template-columns: repeat(7, 1fr); }
+  .day-strip > :nth-child(n+8) { display: none; }
+  .agenda-day { grid-template-columns: 1fr; gap: 6px; }
+}
+
+@media (max-width: 480px) {
+  .card-grid { grid-template-columns: repeat(2, 1fr); }
+  .cat-chip { font-size: 12px; padding: 5px 9px; }
+  .cat-chip-grand { width: 100%; margin-left: 0; padding: 6px 0 0; }
+  .topbar nav a { font-size: 12px; }
+  button.primary { padding: 8px 12px; font-size: 13px; }
+}

@@ -525,16 +525,55 @@ def _extract_amazon(soup: BeautifulSoup, result: ScrapeResult) -> None:
             result.price = p
             result.price_text = f"${p:.2f}"
 
-    # Image — prefer high-res from data-old-hires; fall back to src.
+    # Image — Amazon's DOM order, then inline-script blob (colorImages JSON),
+    # then any plausible m.media-amazon.com image as a last resort. Amazon
+    # increasingly defers main-image rendering to client JS so the DOM
+    # selectors miss; the inline JSON is reliably in the SSR HTML.
+    new_image = None
     img_el = (
         soup.select_one("#landingImage")
         or soup.select_one("#imgBlkFront")
+        or soup.select_one("#main-image-container img")
+        or soup.select_one("#imgTagWrapperId img")
         or soup.select_one("img[data-old-hires]")
     )
     if img_el:
-        src = img_el.get("data-old-hires") or img_el.get("src")
+        src = (
+            img_el.get("data-old-hires")
+            or img_el.get("data-a-dynamic-image")
+            or img_el.get("src")
+        )
+        if src and src.startswith("{"):
+            # data-a-dynamic-image is a JSON map of url -> [w,h]; pick the
+            # largest dimension's URL.
+            try:
+                dyn = json.loads(src)
+                if isinstance(dyn, dict) and dyn:
+                    src = max(
+                        dyn.items(),
+                        key=lambda kv: (kv[1][0] if isinstance(kv[1], list) and kv[1] else 0),
+                    )[0]
+            except (json.JSONDecodeError, TypeError, ValueError):
+                src = None
         if src and src.startswith("http"):
-            result.image_url = src
+            new_image = src
+    if not new_image:
+        # Scan inline scripts for the colorImages blob — Amazon embeds the
+        # full image gallery JSON here even when the <img> tags are deferred.
+        for sc in soup.find_all("script"):
+            txt = sc.string or sc.get_text() or ""
+            if "hiRes" not in txt and "colorImages" not in txt:
+                continue
+            m = re.search(r'"hiRes"\s*:\s*"(https?://[^"\\]+)"', txt)
+            if m:
+                new_image = m.group(1)
+                break
+            m = re.search(r'"large"\s*:\s*"(https?://[^"\\]+)"', txt)
+            if m:
+                new_image = m.group(1)
+                break
+    if new_image:
+        result.image_url = new_image
 
     # Delivery — parse the literal "FREE delivery <date>" copy.
     delivery_text = ""

@@ -57,7 +57,23 @@
           <div class="card-grid">
           {% for category, items in grouped[lt].items() %}
                 {% for it in items %}
-                  <article class="card urgency-{{ it.urgency }}" data-id="{{ it.id }}" data-cat="{{ category }}">
+                  <article class="card urgency-{{ it.urgency }}" data-id="{{ it.id }}" data-cat="{{ category }}"
+                           data-item='{{ {
+                             "id": it.id,
+                             "name": it.name,
+                             "price": it.price,
+                             "image_url": it.image_url,
+                             "source_url": it.source_url,
+                             "store": it.store,
+                             "category": category,
+                             "list_type": it.list_type,
+                             "ship_days_min": it.ship_days_min,
+                             "ship_days_max": it.ship_days_max,
+                             "ship_source": it.ship_source,
+                             "needs_assembly": it.needs_assembly,
+                             "assembly_days": it.assembly_days,
+                             "notes": it.notes
+                           } | tojson }}'>
                     <div class="card-img">
                       {% if it.image_url %}
                         <img src="{{ it.image_url }}" alt="{{ it.name }}" loading="lazy">
@@ -97,6 +113,7 @@
                         </div>
                       {% endif %}
                       <div class="actions">
+                        <button class="edit-item primary-outline" data-id="{{ it.id }}">Edit</button>
                         <select class="move-list" data-id="{{ it.id }}">
                           {% for opt in list_types %}
                             <option value="{{ opt }}" {% if opt == it.list_type %}selected{% endif %}>
@@ -104,16 +121,6 @@
                             </option>
                           {% endfor %}
                         </select>
-                        <button class="edit-ship" data-id="{{ it.id }}"
-                                data-min="{{ it.ship_days_min if it.ship_days_min is not none else '' }}"
-                                data-max="{{ it.ship_days_max if it.ship_days_max is not none else '' }}">
-                          Ship days
-                        </button>
-                        <button class="edit-assembly" data-id="{{ it.id }}"
-                                data-needs="{{ '1' if it.needs_assembly else '0' }}"
-                                data-days="{{ it.assembly_days or 1 }}">
-                          Assembly
-                        </button>
                         <button class="delete-item danger" data-id="{{ it.id }}">Delete</button>
                       </div>
                     </div>
@@ -131,23 +138,67 @@
   </section>
 </div>
 
-<!-- Ship-days mini-modal -->
-<div id="ship-modal" class="modal hidden">
-  <div class="modal-card narrow">
-    <h2>Confirm shipping days</h2>
-    <p class="muted">After checking the product page (ideally with your zip code entered), enter the shipping window you saw and mark it verified.</p>
-    <input type="hidden" id="ship-modal-id">
-    <div class="grid-2">
-      <label>Min days <input type="number" id="ship-modal-min" min="0"></label>
-      <label>Max days <input type="number" id="ship-modal-max" min="0"></label>
+<!-- Master edit modal — change anything on an existing item -->
+<div id="edit-modal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Edit item</h2>
+    <input type="hidden" id="edit-id">
+
+    <div class="preview-row">
+      <img id="edit-image-preview" src="" alt="">
+      <div class="preview-fields">
+        <label>Name <input type="text" id="edit-name"></label>
+        <label>Price <input type="number" step="0.01" id="edit-price"></label>
+        <label>Store <input type="text" id="edit-store"></label>
+      </div>
     </div>
-    <label class="inline" style="margin-top:10px;">
-      <input type="checkbox" id="ship-modal-verified">
-      <span>I verified this on the product page (mark as verified)</span>
-    </label>
+
+    <label>Image URL <input type="url" id="edit-image-url" placeholder="https://…"></label>
+    <label>Product URL <input type="url" id="edit-source-url" placeholder="https://…"></label>
+
+    <div class="grid-2">
+      <label>List
+        <select id="edit-list">
+          <option value="to_buy">To Buy</option>
+          <option value="wish_list">Wish List</option>
+          <option value="interested">Interested</option>
+        </select>
+      </label>
+      <label>Category
+        <select id="edit-category">
+          {% for c in settings.categories %}<option>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <fieldset class="ship-box">
+      <legend>Shipping days</legend>
+      <div class="grid-2">
+        <label>Min days <input type="number" id="edit-ship-min" min="0"></label>
+        <label>Max days <input type="number" id="edit-ship-max" min="0"></label>
+      </div>
+      <label class="inline" style="margin-top:8px;">
+        <input type="checkbox" id="edit-ship-verified">
+        <span>Verified on product page (mark as verified)</span>
+      </label>
+    </fieldset>
+
+    <fieldset class="ship-box">
+      <legend>Assembly</legend>
+      <label class="inline">
+        <input type="checkbox" id="edit-needs-assembly">
+        Needs to be built / assembled
+      </label>
+      <label id="edit-assembly-days-wrap" class="hidden">Assembly days
+        <input type="number" id="edit-assembly-days" min="1" value="1">
+      </label>
+    </fieldset>
+
+    <label>Notes <textarea id="edit-notes" rows="3"></textarea></label>
+
     <div class="modal-actions">
-      <button id="ship-modal-save" class="primary">Save</button>
-      <button id="ship-modal-cancel">Cancel</button>
+      <button id="edit-save" class="primary">Save changes</button>
+      <button id="edit-cancel">Cancel</button>
     </div>
   </div>
 </div>
