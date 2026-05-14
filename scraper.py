@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import threading
 from dataclasses import asdict, dataclass, field
@@ -21,6 +22,12 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+# Optional residential-proxy service. When set, requests for bot-protected
+# stores are routed through ScrapingBee instead of attempted directly. This
+# is the only reliable way to scrape Amazon (and similar) from a cloud host
+# like Render, whose IP ranges are bot-walled. 1000 credits/month free tier.
+SCRAPINGBEE_API_KEY = os.environ.get("SCRAPINGBEE_API_KEY", "").strip()
 
 # curl_cffi provides Chrome TLS-fingerprint impersonation, which is required
 # to get past Akamai / PerimeterX bot walls (Anthropologie, Target, Wayfair,
@@ -123,10 +130,32 @@ def _get_session(store: str):
         return s
 
 
+def _fetch_via_scrapingbee(url: str):
+    """Route a request through ScrapingBee's residential proxy. Required for
+    Amazon and similar from cloud hosts (Render, etc.). Premium proxy uses
+    25 credits/request; free tier gives 1000/month."""
+    params = {
+        "api_key": SCRAPINGBEE_API_KEY,
+        "url": url,
+        "render_js": "false",       # static HTML is enough for our extractors
+        "premium_proxy": "true",    # residential IP — required for Amazon
+        "country_code": "us",
+    }
+    return requests.get(
+        "https://app.scrapingbee.com/api/v1/",
+        params=params,
+        timeout=60,  # ScrapingBee can take 30-45s on slow targets
+    )
+
+
 def _fetch(url: str, store: str):
-    """Single-call HTTP fetch. For bot-protected stores uses curl_cffi
-    Chrome impersonation + a session-warmed cookie jar; otherwise plain
-    requests. Returns a response-like object with .status_code and .text."""
+    """Single-call HTTP fetch. Order of preference:
+    1. ScrapingBee (if SCRAPINGBEE_API_KEY env var set) for bot-protected stores
+    2. curl_cffi with Chrome impersonation + warmed cookies (local dev)
+    3. plain requests
+    Returns a response-like object with .status_code and .text."""
+    if SCRAPINGBEE_API_KEY and store in BOT_PROTECTED_STORES:
+        return _fetch_via_scrapingbee(url)
     if store in BOT_PROTECTED_STORES and _HAS_CFFI:
         s = _get_session(store)
         if s is not None:
