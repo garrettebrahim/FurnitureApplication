@@ -45,7 +45,7 @@ def _check_auth(user: str, pw: str) -> bool:
 def _require_auth():
     if not AUTH_ENABLED:
         return None
-    if request.path.startswith("/static/"):
+    if request.path.startswith("/static/") or request.path == "/healthz":
         return None
     auth = request.authorization
     if auth and _check_auth(auth.username or "", auth.password or ""):
@@ -55,6 +55,11 @@ def _require_auth():
         401,
         {"WWW-Authenticate": 'Basic realm="Furniture Planner"'},
     )
+
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
 
 
 # ---------------------------------------------------------------------------

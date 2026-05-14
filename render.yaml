@@ -15,4 +15,4 @@ services:
         sync: false   # set in dashboard
       - key: DATA_DIR
         value: /opt/render/project/src/data
-    healthCheckPath: /
+    healthCheckPath: /healthz
