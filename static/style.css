@@ -106,7 +106,7 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; }
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
 }
 .card {
@@ -180,6 +180,52 @@ label.inline input[type="checkbox"] { width: auto; margin: 0; }
   font-size: 14px;
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Totals strip above the items grid */
+.cat-totals-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 14px;
+}
+.cat-chip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.1s, border-color 0.1s;
+}
+.cat-chip:hover { background: #f3f1ec; }
+.cat-chip.active { background: var(--ink); color: var(--accent-ink); border-color: var(--ink); }
+.cat-chip.active .cat-chip-count { background: rgba(255,255,255,0.2); color: #fff; }
+.cat-chip.active .cat-chip-total { color: #fff; }
+.cat-chip-name { font-weight: 600; }
+.cat-chip-count {
+  display: inline-block;
+  background: var(--line);
+  color: var(--muted);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.cat-chip-total { color: var(--accent); font-weight: 600; }
+.cat-chip-grand { margin-left: auto; font-size: 13px; color: var(--muted); padding: 6px 12px; }
+.cat-chip-grand strong { color: var(--ink); margin-left: 4px; }
+
+.badge-cat {
+  background: #e9eef0;
+  color: #1f4ea8;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Ship-source badges */

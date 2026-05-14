@@ -41,17 +41,23 @@
     {% for lt in list_types %}
       <div class="tab-panel {% if loop.first %}active{% endif %}" data-panel="{{ lt }}">
         {% if grouped[lt] %}
+          {# Per-category totals strip — keeps the spend visible without forcing one row per category #}
+          <div class="cat-totals-strip">
+            {% for category, items in grouped[lt].items() %}
+              {% set cat_total = totals[lt].per_category[category].total %}
+              <button class="cat-chip" data-cat="{{ category }}" type="button">
+                <span class="cat-chip-name">{{ category }}</span>
+                <span class="cat-chip-count">{{ items|length }}</span>
+                {% if cat_total > 0 %}<span class="cat-chip-total">${{ "{:,.0f}".format(cat_total) }}</span>{% endif %}
+              </button>
+            {% endfor %}
+            <span class="cat-chip-grand">Total <strong>${{ "{:,.2f}".format(totals[lt].total) }}</strong></span>
+          </div>
+
+          <div class="card-grid">
           {% for category, items in grouped[lt].items() %}
-            <div class="category-group" data-cat="{{ category }}">
-              <h2>
-                {{ category }}
-                <span class="muted">({{ items|length }} item{% if items|length != 1 %}s{% endif %})</span>
-                {% set cat_total = totals[lt].per_category[category].total %}
-                {% if cat_total > 0 %}<span class="cat-total">${{ "{:,.2f}".format(cat_total) }}</span>{% endif %}
-              </h2>
-              <div class="card-grid">
                 {% for it in items %}
-                  <article class="card urgency-{{ it.urgency }}" data-id="{{ it.id }}">
+                  <article class="card urgency-{{ it.urgency }}" data-id="{{ it.id }}" data-cat="{{ category }}">
                     <div class="card-img">
                       {% if it.image_url %}
                         <img src="{{ it.image_url }}" alt="{{ it.name }}" loading="lazy">
@@ -69,6 +75,7 @@
                       </h4>
                       <div class="price">
                         {% if it.price is not none %}${{ "%.2f"|format(it.price) }}{% else %}<span class="muted">no price</span>{% endif %}
+                        <span class="badge badge-cat">{{ category }}</span>
                         {% if it.store and it.store != 'generic' %}<span class="badge">{{ it.store }}</span>{% endif %}
                         {% if it.needs_assembly %}<span class="badge badge-assembly">🔧 {{ it.assembly_days }}d build</span>{% endif %}
                       </div>
@@ -112,9 +119,8 @@
                     </div>
                   </article>
                 {% endfor %}
-              </div>
-            </div>
           {% endfor %}
+          </div>
         {% else %}
           <div class="empty">
             <p>Nothing here yet. Click <strong>+ Add Item</strong> to add a product URL.</p>

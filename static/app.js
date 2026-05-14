@@ -17,14 +17,25 @@
   });
 
   // -------------------- Category filter --------------------
+  function applyCategoryFilter(cat) {
+    $$(".cat-link").forEach((l) => l.classList.toggle("active", l.dataset.cat === cat));
+    $$(".cat-chip").forEach((c) => c.classList.toggle("active", c.dataset.cat === cat));
+    $$(".card[data-cat]").forEach((card) => {
+      card.style.display = cat === "__all__" || card.dataset.cat === cat ? "" : "none";
+    });
+  }
   $$(".cat-link").forEach((link) => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      const cat = link.dataset.cat;
-      $$(".cat-link").forEach((l) => l.classList.toggle("active", l === link));
-      $$(".category-group").forEach((g) => {
-        g.style.display = cat === "__all__" || g.dataset.cat === cat ? "" : "none";
-      });
+      applyCategoryFilter(link.dataset.cat);
+    });
+  });
+  // Clicking a chip in the totals strip filters too; clicking the active
+  // chip again clears the filter back to "All".
+  $$(".cat-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const cat = chip.classList.contains("active") ? "__all__" : chip.dataset.cat;
+      applyCategoryFilter(cat);
     });
   });
 
@@ -49,8 +60,10 @@
   }
   $("#add-item-btn").addEventListener("click", openModal);
   $("#cancel-btn").addEventListener("click", closeModal);
+  // Only close on true backdrop clicks — never when the click landed on or
+  // bubbled up from anything inside the modal card.
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal();
+    if (!e.target.closest(".modal-card")) closeModal();
   });
 
   // -------------------- Scrape --------------------
@@ -102,8 +115,13 @@
     if (data.image_url) {
       img.src = data.image_url;
       img.style.display = "";
+      // Track the canonical URL so the save handler doesn't fall back to
+      // the browser's resolved .src (which can be the page URL).
+      preview.dataset.imageUrl = data.image_url;
     } else {
+      img.removeAttribute("src");
       img.style.display = "none";
+      delete preview.dataset.imageUrl;
     }
     updateWindowPreview();
 
@@ -160,7 +178,7 @@
       store: $("#add-store").value,
       name: $("#add-name").value.trim(),
       price: parseFloat($("#add-price").value) || null,
-      image_url: $("#preview-img").src || null,
+      image_url: preview.dataset.imageUrl || null,
       list_type: $("#add-list").value,
       category: $("#add-category").value,
       ship_days_min: parseInt($("#add-ship-min").value, 10),
@@ -192,7 +210,7 @@
   if (shipModal) {
     $("#ship-modal-cancel").addEventListener("click", () => shipModal.classList.add("hidden"));
     shipModal.addEventListener("click", (e) => {
-      if (e.target === shipModal) shipModal.classList.add("hidden");
+      if (!e.target.closest(".modal-card")) shipModal.classList.add("hidden");
     });
     $("#ship-modal-save").addEventListener("click", async () => {
       const id = $("#ship-modal-id").value;

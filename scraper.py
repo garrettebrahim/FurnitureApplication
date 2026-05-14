@@ -15,6 +15,7 @@ import math
 import re
 import threading
 from dataclasses import asdict, dataclass, field
+from datetime import date, datetime
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -76,6 +77,16 @@ QUINCE_MTO_BUSINESS_DAYS = (15, 20)  # advertised window for Made-to-Order
 # warm-up to seed cookies for these. Falls back to plain requests otherwise.
 BOT_PROTECTED_STORES = {"anthropologie", "target", "wayfair", "amazon"}
 
+# Some stores' bot wall is sensitive to which Chrome version we impersonate.
+# Wayfair's PerimeterX flagged chrome124 but lets chrome120 through.
+STORE_IMPERSONATE = {
+    "wayfair": "chrome120",
+    "anthropologie": "chrome124",
+    "target": "chrome124",
+    "amazon": "chrome124",
+}
+DEFAULT_IMPERSONATE = "chrome124"
+
 # Cached per-host curl_cffi sessions so warm-up cookies persist across scrapes.
 _SESSIONS: dict[str, "object"] = {}
 _SESSION_LOCK = threading.Lock()
@@ -99,7 +110,8 @@ def _get_session(store: str):
         s = _SESSIONS.get(store)
         if s is not None:
             return s
-        s = _cffi_requests.Session(impersonate="chrome124")
+        impersonate = STORE_IMPERSONATE.get(store, DEFAULT_IMPERSONATE)
+        s = _cffi_requests.Session(impersonate=impersonate)
         home = _store_home(store)
         if home:
             try:
@@ -444,6 +456,152 @@ def _extract_quince(soup: BeautifulSoup, result: ScrapeResult) -> None:
             result.ship_source_detail = "Quince standard delivery (~14-21 calendar days)"
 
 
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _parse_amazon_date(date_str: str, today: date | None = None) -> Optional[date]:
+    """Parse Amazon-style 'Monday, May 18' or 'May 18' to a date.
+
+    Resolves the year by picking the next occurrence on or after `today`.
+    """
+    today = today or date.today()
+    m = re.search(r"([A-Z][a-z]{2})[a-z]*\s+(\d{1,2})", date_str)
+    if not m:
+        return None
+    mo = _MONTHS.get(m.group(1).lower()[:3])
+    if not mo:
+        return None
+    day = int(m.group(2))
+    year = today.year
+    try:
+        d = date(year, mo, day)
+    except ValueError:
+        return None
+    if d < today:
+        try:
+            d = date(year + 1, mo, day)
+        except ValueError:
+            return None
+    return d
+
+
+def _clean_amazon_title(raw: str) -> str:
+    """Strip Amazon's SEO prefix/suffix and brand wrapping from a title."""
+    if not raw:
+        return raw
+    s = raw.strip()
+    # Strip leading "Amazon.com: " or "Amazon: "
+    s = re.sub(r"^Amazon(?:\.com)?\s*:\s*", "", s, flags=re.I)
+    # Strip trailing " : <category>" tail e.g. " : Home & Kitchen"
+    s = re.sub(r"\s*:\s*[A-Z][^:]{2,40}$", "", s)
+    return s.strip()
+
+
+def _extract_amazon(soup: BeautifulSoup, result: ScrapeResult) -> None:
+    """Amazon page parser. Always overrides generic results because Amazon's
+    DOM is consistent and the generic extractor often picks a list/coupon
+    price or the SEO-wrapped <title>."""
+
+    # Title from productTitle (authoritative) — else clean the generic one.
+    t = soup.select_one("#productTitle")
+    if t:
+        result.name = t.get_text(strip=True)
+    elif result.name:
+        result.name = _clean_amazon_title(result.name)
+
+    # Price — corePrice block, skipping strikethrough/list (.a-text-price)
+    price_el = (
+        soup.select_one("#corePrice_feature_div .a-price:not(.a-text-price) .a-offscreen")
+        or soup.select_one("#corePrice_desktop .a-price:not(.a-text-price) .a-offscreen")
+        or soup.select_one("#apex_desktop .a-price:not(.a-text-price) .a-offscreen")
+        or soup.select_one("#corePriceDisplay_desktop_feature_div .a-price:not(.a-text-price) .a-offscreen")
+    )
+    if price_el:
+        p = _parse_price(price_el.get_text(strip=True))
+        if p is not None:
+            result.price = p
+            result.price_text = f"${p:.2f}"
+
+    # Image — prefer high-res from data-old-hires; fall back to src.
+    img_el = (
+        soup.select_one("#landingImage")
+        or soup.select_one("#imgBlkFront")
+        or soup.select_one("img[data-old-hires]")
+    )
+    if img_el:
+        src = img_el.get("data-old-hires") or img_el.get("src")
+        if src and src.startswith("http"):
+            result.image_url = src
+
+    # Delivery — parse the literal "FREE delivery <date>" copy.
+    delivery_text = ""
+    for sel in (
+        "#mir-layout-DELIVERY_BLOCK",
+        "#deliveryBlockMessage",
+        "[data-csa-c-content-id='DEXUnifiedCXPDM']",
+    ):
+        el = soup.select_one(sel)
+        if el:
+            delivery_text = el.get_text(" ", strip=True)
+            if delivery_text:
+                break
+    if not delivery_text:
+        return
+
+    today = date.today()
+    date_pattern = r"(?:[A-Za-z]+,?\s+)?([A-Z][a-z]+\s+\d{1,2})"
+
+    prime_d = None
+    standard_d = None
+
+    # Prime line
+    pm = re.search(
+        r"prime[^.]*?free\s+delivery\s+" + date_pattern,
+        delivery_text,
+        re.I,
+    )
+    if pm:
+        prime_d = _parse_amazon_date(pm.group(1), today)
+
+    # "fastest delivery" sometimes appears separately
+    if not prime_d:
+        fm = re.search(r"fastest\s+delivery\s+" + date_pattern, delivery_text, re.I)
+        if fm:
+            prime_d = _parse_amazon_date(fm.group(1), today)
+
+    # Standard "FREE delivery" — the first one that's not the Prime date.
+    for m in re.finditer(r"free\s+delivery\s+" + date_pattern, delivery_text, re.I):
+        d = _parse_amazon_date(m.group(1), today)
+        if d and d != prime_d:
+            standard_d = d
+            break
+
+    p_days = (prime_d - today).days if prime_d else None
+    s_days = (standard_d - today).days if standard_d else None
+
+    if p_days is not None and s_days is not None:
+        result.ship_days_min = max(p_days, 0)
+        result.ship_days_max = max(s_days, p_days, 1)
+        result.ship_source = "page"
+        result.ship_source_detail = (
+            f"Amazon Prime {prime_d.isoformat()} ({p_days}d), "
+            f"Standard {standard_d.isoformat()} ({s_days}d)"
+        )
+    elif p_days is not None:
+        result.ship_days_min = max(p_days, 0)
+        result.ship_days_max = max(p_days + 1, 1)
+        result.ship_source = "page"
+        result.ship_source_detail = f"Amazon Prime delivery: {prime_d.isoformat()} ({p_days}d)"
+    elif s_days is not None:
+        result.ship_days_min = max(s_days - 1, 0)
+        result.ship_days_max = max(s_days, 1)
+        result.ship_source = "page"
+        result.ship_source_detail = f"Amazon delivery: {standard_d.isoformat()} ({s_days}d)"
+
+
 def _extract_anthropologie(soup: BeautifulSoup, result: ScrapeResult) -> None:
     """Anthropologie publishes a clean Product JSON-LD plus a shipping table
     with literal copy like 'Standard 4-8 business days'. We rely on the
@@ -487,11 +645,77 @@ def _extract_anthropologie(soup: BeautifulSoup, result: ScrapeResult) -> None:
         result.ship_source_detail = "Anthropologie white-glove delivery (typically 2-4 weeks)"
 
 
+_WAYFAIR_SUFFIX_RE = re.compile(r"\s*&\s*Reviews\s*\|\s*Wayfair\s*$", re.I)
+
+
+def _wayfair_unescape(s: str) -> str:
+    """One-level JS string un-escape so we can regex over Wayfair's
+    server-rendered React state (which embeds JSON as an escaped string)."""
+    return (
+        s.replace("\\\\", "\x00")  # placeholder for literal backslashes
+        .replace('\\"', '"')
+        .replace("\\/", "/")
+        .replace("\\n", " ")
+        .replace("\x00", "\\")
+    )
+
+
 def _extract_wayfair(soup: BeautifulSoup, result: ScrapeResult) -> None:
-    """Wayfair publishes shipping windows in JSON-LD `OfferShippingDetails`
-    with handling+transit times — already handled in the generic JSON-LD
-    extractor. This hook stays for future Wayfair-specific parsing."""
-    return
+    """Wayfair (PerimeterX-protected) embeds product data in escaped JSON in
+    the streaming React payload. Generic OG tags give us title+image; this
+    extractor pulls price and the 'Get it by <date>' delivery promise from
+    the embedded state."""
+
+    # Title — strip the " & Reviews | Wayfair" SEO suffix on og:title.
+    if result.name:
+        result.name = _WAYFAIR_SUFFIX_RE.sub("", result.name).strip()
+    if not result.name:
+        h1 = soup.find("h1")
+        if h1:
+            result.name = h1.get_text(" ", strip=True)
+
+    # Walk the raw HTML for product fields. Wayfair's React state is
+    # double-escaped, so unescape one level before regexing.
+    raw = str(soup)
+    unesc = _wayfair_unescape(raw)
+
+    # Primary price — pattern is
+    #   "priceVariation":"PRIMARY",..."amount":"1100",...
+    if result.price is None:
+        m = re.search(
+            r'"priceVariation"\s*:\s*"PRIMARY"[^}]{0,600}?"amount"\s*:\s*"(\d+(?:\.\d+)?)"',
+            unesc,
+        )
+        if m:
+            try:
+                p = float(m.group(1))
+                result.price = p
+                result.price_text = f"${p:,.2f}"
+            except ValueError:
+                pass
+
+    # Delivery — "Get it by <DayOfWeek, Month Day>" appears on the canonical
+    # ground delivery option. Use it as the upper bound; assume Wayfair's
+    # "shipsToday" / faster options shave a few days off the lower bound.
+    today = date.today()
+    delivery_d = None
+    m = re.search(r'"description"\s*:\s*"Get it by\s+([A-Za-z]+,?\s+[A-Z][a-z]+\s+\d{1,2})"', unesc)
+    if m:
+        delivery_d = _parse_amazon_date(m.group(1), today)
+    if not delivery_d:
+        # Some Wayfair pages use plain text — fall back to a visible scan.
+        body_text = soup.get_text(" ", strip=True)
+        m = re.search(r"Get it by\s+([A-Za-z]+,?\s+[A-Z][a-z]+\s+\d{1,2})", body_text, re.I)
+        if m:
+            delivery_d = _parse_amazon_date(m.group(1), today)
+    if delivery_d:
+        days = (delivery_d - today).days
+        result.ship_days_min = max(days - 2, 1)
+        result.ship_days_max = max(days, days + 1)
+        result.ship_source = "page"
+        result.ship_source_detail = (
+            f"Wayfair Ground Delivery: arrives by {delivery_d.isoformat()} (~{days}d)"
+        )
 
 
 def _generic_nextdata_probe(soup: BeautifulSoup, result: ScrapeResult) -> None:
@@ -587,6 +811,8 @@ def scrape(url: str, zip_code: str = "") -> dict:
         _extract_wayfair(soup, result)
     elif result.store == "anthropologie":
         _extract_anthropologie(soup, result)
+    elif result.store == "amazon":
+        _extract_amazon(soup, result)
 
     # For Next.js sites (Target/Anthropologie/etc.), backfill missing fields
     # from __NEXT_DATA__ when generic JSON-LD / OG missed them.
